@@ -35,6 +35,11 @@ jobs:
             if [ "$published" = 'false' ]; then echo 'build=false' >> "$GITHUB_OUTPUT"; exit 0; fi
           fi
           sha=$(gh api "repos/Maxhm007/DayBook/commits/$ref" --jq .sha)
+          version=$(gh api "repos/Maxhm007/DayBook/contents/desktop/package.json?ref=$sha" --jq .content | base64 --decode | jq -r .version)
+          tag="desktop-v$version"
+          if [[ "$ref" == desktop-v* && "$ref" != "$tag" ]]; then echo 'Source tag does not match package version' >&2; exit 1; fi
+          published=$(gh release view "$tag" -R Maxhm007/DayBook-Releases --json isDraft --jq .isDraft 2>/dev/null || true)
+          if [ "$published" = 'false' ]; then echo 'Version already published; bump the desktop version for a new release.'; echo 'build=false' >> "$GITHUB_OUTPUT"; exit 0; fi
           echo "source_ref=$sha" >> "$GITHUB_OUTPUT"
           echo 'build=true' >> "$GITHUB_OUTPUT"
   windows:
@@ -107,7 +112,8 @@ jobs:
             if (-not ($release.assets.name -like $pattern)) { throw "Missing asset $pattern" }
           }
           $manifestDir = Join-Path $env:RUNNER_TEMP 'daybook-manifest'
-          gh release download $tag -R Maxhm007/DayBook-Releases -p latest.json -D $manifestDir
+          gh release download $tag -R Maxhm007/DayBook-Releases -p latest.json -p '*.exe' -p '*.msi' -p '*.sig' -D $manifestDir
+          node source/scripts/verify-release.mjs $manifestDir
           $manifest = Get-Content (Join-Path $manifestDir 'latest.json') | ConvertFrom-Json
           if ($manifest.version -ne $version) { throw 'Updater manifest version mismatch' }
           $platform = $manifest.platforms.'windows-x86_64'
@@ -116,5 +122,6 @@ jobs:
           $bundleFiles | ForEach-Object { "{0}  {1}" -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower(),$_.Name } | Set-Content SHA256SUMS.txt
           gh release upload $tag SHA256SUMS.txt -R Maxhm007/DayBook-Releases --clobber
           gh release edit $tag -R Maxhm007/DayBook-Releases --draft=false --latest
+
 
 
