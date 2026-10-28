@@ -1,5 +1,7 @@
 name: Build DayBook Windows installers
 on:
+  schedule:
+    - cron: '*/30 * * * *'
   workflow_dispatch:
     inputs:
       source_ref:
@@ -12,14 +14,39 @@ concurrency:
   group: daybook-windows-release
   cancel-in-progress: false
 jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      source_ref: ${{ steps.source.outputs.source_ref }}
+      build: ${{ steps.source.outputs.build }}
+    steps:
+      - id: source
+        env:
+          GH_TOKEN: ${{ secrets.DAYBOOK_SOURCE_TOKEN }}
+          REQUESTED_REF: ${{ inputs.source_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="$REQUESTED_REF"
+          if [ -z "$ref" ]; then
+            ref=$(gh api repos/Maxhm007/DayBook/releases --jq '[.[] | select(.draft == false and .prerelease == false and (.tag_name | startswith("desktop-v")))] | .[0].tag_name // empty')
+            if [ -z "$ref" ]; then echo 'build=false' >> "$GITHUB_OUTPUT"; exit 0; fi
+            published=$(gh release view "$ref" -R Maxhm007/DayBook-Releases --json isDraft --jq .isDraft 2>/dev/null || true)
+            if [ "$published" = 'false' ]; then echo 'build=false' >> "$GITHUB_OUTPUT"; exit 0; fi
+          fi
+          sha=$(gh api "repos/Maxhm007/DayBook/commits/$ref" --jq .sha)
+          echo "source_ref=$sha" >> "$GITHUB_OUTPUT"
+          echo 'build=true' >> "$GITHUB_OUTPUT"
   windows:
+    needs: resolve
+    if: needs.resolve.outputs.build == 'true'
     runs-on: windows-latest
     steps:
       - name: Check out private source
         uses: actions/checkout@v4
         with:
           repository: Maxhm007/DayBook
-          ref: ${{ inputs.source_ref }}
+          ref: ${{ needs.resolve.outputs.source_ref }}
           token: ${{ secrets.DAYBOOK_SOURCE_TOKEN }}
           path: source
           persist-credentials: false
@@ -57,7 +84,7 @@ jobs:
           releaseName: DayBook __VERSION__ for Windows
           releaseBody: |
             Offline Windows journal, Google sign-in/sync connector, and signed automatic updates.
-            Source revision: ${{ inputs.source_ref }}.
+            Source revision: ${{ needs.resolve.outputs.source_ref }}.
             Google cloud features require configured Desktop OAuth credentials and a deployed DayBook sync gateway. Live Google login/two-device sync and clean-machine upgrades are not yet qualified.
             Installers have updater signatures; no Windows Authenticode certificate is configured.
           releaseDraft: true
@@ -76,3 +103,4 @@ jobs:
             if (-not ($release.assets.name -like $pattern)) { throw "Missing asset $pattern" }
           }
           gh release edit $tag -R Maxhm007/DayBook-Releases --draft=false --latest
+
