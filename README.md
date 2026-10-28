@@ -10,7 +10,7 @@ Cloud features require an operator-configured Google Desktop OAuth client and ho
 
 The operator must configure the OAuth consent screen, enable Google Sheets access, provide the native client ID/installed-app secret, deploy one HTTPS gateway process, and share the private **DayBook Database** workbook with the server's service account. Each Google user has a separate worksheet; users do not get direct access to other users' tabs. No Supabase or Firebase is used.
 
-Open **Settings**, enter the Desktop client ID, installed-app secret and gateway base URL, then choose **Sign in with Google**. Authentication opens your system browser. Refresh tokens stay in Windows Credential Manager. Local-only and Google-account journals are separate workspaces.
+Open **Settings**, enter the Desktop client ID, installed-app secret and gateway base URL, then choose **Sign in with Google**. Authentication opens your system browser. Refresh tokens stay in Windows Credential Manager. At sign-in, the local journal moves into that account and syncs automatically; failed uploads remain safe locally. Signing in on another PC downloads that account journal.
 
 ## Updates
 
