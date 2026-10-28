@@ -1,0 +1,78 @@
+name: Build DayBook Windows installers
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Immutable DayBook source commit SHA
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: daybook-windows-release
+  cancel-in-progress: false
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out private source
+        uses: actions/checkout@v4
+        with:
+          repository: Maxhm007/DayBook
+          ref: ${{ inputs.source_ref }}
+          token: ${{ secrets.DAYBOOK_SOURCE_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            source/package-lock.json
+            source/desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: source/desktop/src-tauri -> target
+      - run: npm ci
+        working-directory: source
+      - run: npm test -- --maxWorkers=1
+        working-directory: source
+      - run: npm ci
+        working-directory: source/desktop
+      - run: npm test
+        working-directory: source/desktop
+      - run: npm run build
+        working-directory: source/desktop
+      - run: cargo test --locked --manifest-path source/desktop/src-tauri/Cargo.toml
+      - name: Build signed installers
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          projectPath: source/desktop
+          tagName: desktop-v__VERSION__
+          releaseCommitish: main
+          releaseName: DayBook __VERSION__ for Windows
+          releaseBody: |
+            Offline Windows journal, Google sign-in/sync connector, and signed automatic updates.
+            Source revision: ${{ inputs.source_ref }}.
+            Google cloud features require configured Desktop OAuth credentials and a deployed DayBook sync gateway. Live Google login/two-device sync and clean-machine upgrades are not yet qualified.
+            Installers have updater signatures; no Windows Authenticode certificate is configured.
+          releaseDraft: true
+          prerelease: false
+          updaterJsonPreferNsis: true
+          uploadWorkflowArtifacts: true
+      - name: Validate and publish installers
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = (Get-Content source/desktop/package.json | ConvertFrom-Json).version
+          $tag = "desktop-v$version"
+          $release = gh release view $tag -R Maxhm007/DayBook-Releases --json assets | ConvertFrom-Json
+          foreach ($pattern in @('*.exe','*.msi','*.sig','latest.json')) {
+            if (-not ($release.assets.name -like $pattern)) { throw "Missing asset $pattern" }
+          }
+          gh release edit $tag -R Maxhm007/DayBook-Releases --draft=false --latest
