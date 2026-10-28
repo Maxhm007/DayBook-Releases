@@ -105,5 +105,15 @@ jobs:
           foreach ($pattern in @('*.exe','*.msi','*.sig','latest.json')) {
             if (-not ($release.assets.name -like $pattern)) { throw "Missing asset $pattern" }
           }
+          $manifestDir = Join-Path $env:RUNNER_TEMP 'daybook-manifest'
+          gh release download $tag -R Maxhm007/DayBook-Releases -p latest.json -D $manifestDir
+          $manifest = Get-Content (Join-Path $manifestDir 'latest.json') | ConvertFrom-Json
+          if ($manifest.version -ne $version) { throw 'Updater manifest version mismatch' }
+          $platform = $manifest.platforms.'windows-x86_64'
+          if (-not $platform.signature -or -not $platform.url.StartsWith("https://github.com/Maxhm007/DayBook-Releases/releases/download/$tag/")) { throw 'Invalid Windows updater payload' }
+          $bundleFiles = Get-ChildItem source/desktop/src-tauri/target/release/bundle -Recurse -File | Where-Object Extension -In '.exe','.msi'
+          $bundleFiles | ForEach-Object { "{0}  {1}" -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower(),$_.Name } | Set-Content SHA256SUMS.txt
+          gh release upload $tag SHA256SUMS.txt -R Maxhm007/DayBook-Releases --clobber
           gh release edit $tag -R Maxhm007/DayBook-Releases --draft=false --latest
+
 
