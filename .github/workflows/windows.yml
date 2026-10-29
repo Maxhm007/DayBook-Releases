@@ -86,6 +86,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          DAYBOOK_GOOGLE_CLIENT_ID: ${{ vars.DAYBOOK_GOOGLE_CLIENT_ID }}
+          DAYBOOK_SYNC_GATEWAY_URL: ${{ vars.DAYBOOK_SYNC_GATEWAY_URL }}
         with:
           projectPath: source/desktop
           tagName: desktop-v__VERSION__
@@ -94,7 +96,7 @@ jobs:
           releaseBody: |
             Offline Windows journal, Google sign-in/sync connector, and signed automatic updates.
             Source revision: ${{ needs.resolve.outputs.source_ref }}.
-            Google cloud features require configured Desktop OAuth credentials and a deployed DayBook sync gateway. Live Google login/two-device sync and clean-machine upgrades are not yet qualified.
+            Google sign-in opens Google's secure account page. This build requires DAYBOOK_GOOGLE_CLIENT_ID and DAYBOOK_SYNC_GATEWAY_URL to be configured in the public build repository for sign-in and cloud sync. Live Google login/two-device sync and clean-machine upgrades are not yet qualified.
             Installers have updater signatures; no Windows Authenticode certificate is configured.
           releaseDraft: true
           prerelease: false
@@ -122,6 +124,4 @@ jobs:
           $bundleFiles | ForEach-Object { "{0}  {1}" -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower(),$_.Name } | Set-Content SHA256SUMS.txt
           gh release upload $tag SHA256SUMS.txt -R Maxhm007/DayBook-Releases --clobber
           gh release edit $tag -R Maxhm007/DayBook-Releases --draft=false --latest
-
-
 
